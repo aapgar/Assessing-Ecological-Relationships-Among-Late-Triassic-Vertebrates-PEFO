@@ -1,0 +1,134 @@
+#Code utilized to produce PAIRs analysis heatmaps within Apgar et al., 2025 (publication pending). Slightly modified from Toth et al., 2019 (see references in Apgar et al., 2025).
+
+#Prime R for the first run
+setwd("C:/Users/aapgar13/Documents/Recovered PEFO Files/Stats Analysis - Combined Data, Updated Localities/Adamanian/Updated Taxonomy PAIRS and NMDS")
+rm(list=ls(all=TRUE))
+
+#Enter presence-absence data into the code - will need to input your own!
+#Columns are taxa, rows are localities
+matrix.1.df<-read.csv("Matrix_3_Completed_Updated_Taxonomy.csv", header=T, stringsAsFactors = T)
+spp.key <-  read.csv("ID_Combo_Info_Updated_Taxonomy_2.csv")
+
+# Change matrix to data frame
+matrix.1.df <- as.data.frame(matrix.1.df)
+
+## Data File Edits for Analysis 
+# replaces the rownames of the data frame with the first column of that df.
+namerows <- function(table){
+  rownames(table) <- table[,1]
+  table <- table[,2:ncol(table)]
+  return(table)
+}
+
+# Apply above function to each matrix
+matrix.1 <- namerows(matrix.1.df)
+
+# Use Species Info sheet to set up info for final results matrices. Need to do this for each species in the interaction (Sp 1 and Sp2)
+library(tidyverse)
+key.sp1 <- spp.key
+colnames(key.sp1)[which(names(key.sp1) == "Binomial")] <- "Sp1"
+key.sp1$Classification.Sp2 <- key.sp1$Classification
+key.sp1
+key.sp1 <- key.sp1 %>% select(-Classification,-Species..numerical.,-Binomial_old)
+
+key.sp2 <- spp.key
+colnames(key.sp2)[which(names(key.sp2) == "Binomial")] <- "Sp2"
+
+
+### Megafauna Helper Functions by Aniko B. Toth, 2019
+simpairs <- function(x){ # FETmP function
+  samples = ncol(x) #S
+  z = matrix(nrow=nrow(x),ncol=nrow(x),data=0)
+  occs = array()
+  #convert to P/A. Occs = rowsums of PA matrix.
+  x <- x/x
+  x[is.na(x)] <- 0
+  occs <- rowSums(x)
+  #FETmP Algorithm
+  for (i in 2:nrow(x)) {
+    for (j in 1:(i-1))
+    {
+      a = length(which(x[i,] > 0 & x[j,] > 0)) # B
+      for (k in 0:a)
+        z[i,j] = z[i,j] + choose(occs[j] , k) * choose(samples - occs[j] , occs[i] - k) / choose(samples , occs[i])
+      z[i,j] = z[i,j] - choose(occs[j] , a) * choose(samples - occs[j] , occs[i] - a) / choose(samples , occs[i]) / 2
+      if(z[i,j]>=1) {z[i,j] <- 0.99999999999999994} ## R returns Inf for qnorm(), the z-score transformation in the next line if your number is too close to 1 because of decimal place inaccuracies; this is just a junky solution to circumvent that.
+      z[i,j] = qnorm(z[i,j])
+      z[j,i] = z[i,j]
+    }
+  }
+  return(as.dist(z, diag = F, upper = F))
+}
+
+
+## FET ANALYSIS
+## First Matrix (potentially a time interval, etc)
+fet.results.1 <- simpairs(matrix.1) # apply FETmp function to 1st matrix
+fet.matrix.1 <- as.matrix(fet.results.1) # convert results to matrix format
+rownames(fet.matrix.1) <- matrix.1.df$Binomial # bring back binomial information from matrix for each species interaction
+colnames(fet.matrix.1) <- matrix.1.df$Binomial # bring back binomial information from matrix for each species interaction
+fet.table.1 <- as.data.frame(as.table(fet.matrix.1))
+names(fet.table.1) <- c("Sp1","Sp2","z_score")
+head(fet.table.1)
+
+
+# Merging results with species information
+species2.1 <- merge(fet.table.1, key.sp2, by="Sp2",all.x = TRUE)
+#head(species2.pre)
+fet.1 <- merge(species2.1, key.sp1, by="Sp1",all.x = TRUE)
+head(fet.1)
+
+fet.1$Bin <- "Matrix_2_Completed_Updated_Taxonomy"
+
+#write.csv(fet.1, "fet_1.csv")
+write.csv(fet.1, "C:\\Users\\aapgar13\\Documents\\Recovered PEFO Files/Stats Analysis - Combined Data, Updated Localities\\Adamanian\\Updated Taxonomy PAIRS and NMDS\\fet_1.csv")
+
+# Here you can read in the written results file so you don't have to rerun the FET analysis each time
+fet.1 <- read.csv("fet_1.csv")
+
+#qnorm(0.025)
+# SIGNIFICANT PAIRs ONLY
+# Based on qnorm(0.025) and qnorm(0.975)
+#fet.sig <- subset(fet.1, z_score > 1.959964 | z_score < -1.959964 )
+
+# This table still includes duplicates in the form of interactions between unique species being included twice, for example:
+# Sp_1 and Sp_10 or Sp-10 and Sp1 are the same cooccurrence
+# But these are given the same z_score. Will create duplicates column for further analyses.
+
+# This subsets just the significant pairs
+fet.sig <- subset(fet.1, z_score > 1.959964 | z_score < -1.959964 )
+
+
+# Here are the libraries you needed to re-format your data and for graphing purposes:
+install.packages("ggplot2")
+install.packages("data.table")
+install.packages("reshape2")
+library(ggplot2)
+library(data.table)
+library(reshape2)
+
+# Turn matrix for species by site into a long format for graphing purposes:
+matrix.long <- melt(matrix.1.df)
+# Rename variable column
+names(matrix.long)[names(matrix.long) == "variable"] <- "Sites"
+
+# This creates a heatmap of which species are found across which sites, essentially just graphing your data.
+ggplot(matrix.long, aes(Sites, Binomial)) +
+  geom_tile(aes(fill=value), colour = "black") +
+  labs(title = "Species Presence Across Sites") +
+  theme(axis.text.x = element_text(face='italic', angle = 90, size = 12), axis.text.y = element_text(face = 'italic', size = 12), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), strip.background = element_blank(), strip.text = element_text(size=18))
+
+
+#This creates a heatmap of which species are significantly co-occurring more or less than expected with each other across your sites
+
+#Each side across the diagonal of the rectangle is essentially a mirror image, so I [Dr. Tome] created a polygon to cover one side to make it less confusing
+
+dt.triangle <- data.table(group = c(1,1,1), polygon.x = c(0,66,66), polygon.y = c(0,0,66))
+
+ggplot(fet.sig, aes(Sp1, Sp2)) +
+  geom_tile(aes(fill=z_score), colour = "black") +
+  scale_fill_gradient2(low = "red", mid = "white", high = "blue") +
+  geom_polygon(data = dt.triangle, aes(x=polygon.x, y=polygon.y, group=group), fill = "grey50") +
+  labs(title = "Significant Species Co-occurences") +
+  theme(axis.text.x = element_text(face = 'italic', angle = 90, size = 12), axis.text.y = element_text(face = 'italic', size = 12), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), strip.background = element_blank(), strip.text = element_text(size=18), panel.background = element_rect(fill = "grey50", colour = "black", size = 1, linetype = "solid"), axis.title.x = element_blank(), axis.title.y = element_blank())
+
