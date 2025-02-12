@@ -1,0 +1,24 @@
+#ANOSIM testing done on potential biasing factors present within NMDS ordinations from Apgar et al., 2025 (publication pending)
+
+#ANOSIM Run for GrainSize (Sedimentology)
+ano=anosim(m_com,pc$GrainSize,distance="bray",permutations=9999)
+
+#Output of ANOSIM
+anosim(x=m_com,grouping=pc$Environment,permutations=9999,distance="bray")
+Dissimilarity:bray
+
+
+#ANOSIM Run for Beds
+ano=anosim(m_com,pc$Bed, distance="bray",permutations=9999)
+
+#Output of ANOSIM
+anosim(x=m_com,grouping=pc$Bed,permutations=9999,distance="bray")
+Dissimilarity:bray
+
+
+#ANOSIM Run for Members
+ano=anosim(m_com,pc$Member,distance="bray",permutations=9999)
+
+#Output of ANOSIM
+anosim(x=m_com,grouping=pc$Member,permutations=9999,distance="bray")
+Dissimilarity: bray
